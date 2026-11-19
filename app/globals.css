@@ -1,0 +1,56 @@
+@import "tailwindcss";
+
+/*
+  Beacon design tokens.
+  A light workspace with a deep-ink sidebar and an indigo accent.
+  Change the colors here and the whole app follows.
+*/
+@theme {
+  --color-canvas: #f6f7fb;
+  --color-surface: #ffffff;
+  --color-sunken: #eef0f6;
+  --color-line: #dfe2ee;
+  --color-ink: #151827;
+  --color-muted: #5f667f;
+  --color-sidebar: #12141f;
+
+  --color-brand: #4f46e5;
+  --color-brand-strong: #4338ca;
+  --color-brand-soft: #eceeff;
+  --color-on-brand: #ffffff;
+
+  --color-danger: #c62828;
+  --color-danger-soft: #fdecec;
+  --color-ok: #17794a;
+  --color-ok-soft: #e4f5ec;
+
+  --font-sans: "DM Sans Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Bricolage Grotesque Variable", "DM Sans Variable", ui-sans-serif, system-ui,
+    sans-serif;
+}
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: var(--color-brand-soft);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
