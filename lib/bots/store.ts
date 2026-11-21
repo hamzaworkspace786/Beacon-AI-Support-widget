@@ -2,6 +2,7 @@ import "server-only";
 import { ObjectId } from "mongodb";
 import { DEFAULT_BOT_COLOR, DEFAULT_GREETING } from "@/lib/constants";
 import { db } from "@/lib/mongodb";
+import { deleteConversationsForBot } from "@/lib/chat/store";
 import { deleteKnowledgeForBot } from "@/lib/knowledge/store";
 import type { BotStatus, BotSummary } from "@/lib/types";
 import { generatePublicId } from "./ids";
@@ -134,8 +135,8 @@ export async function updateBot(
 }
 
 /**
- * Deletes a bot together with everything it knows (its sources and passages).
- * From Phase 3 this must also delete the bot's conversations.
+ * Deletes a bot together with everything it knows (its sources and passages)
+ * and every conversation it has had.
  */
 export async function deleteBot(userId: string, id: string): Promise<boolean> {
   const _id = toObjectId(id);
@@ -146,6 +147,7 @@ export async function deleteBot(userId: string, id: string): Promise<boolean> {
   if (!owned) return false;
 
   await deleteKnowledgeForBot(_id);
+  await deleteConversationsForBot(_id);
   const result = await botsCollection().deleteOne({ _id, userId });
   return result.deletedCount === 1;
 }

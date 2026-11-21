@@ -1,15 +1,16 @@
 import Link from "next/link";
 
-export type BotTab = "settings" | "knowledge";
+export type BotTab = "settings" | "knowledge" | "playground";
 
-// The section tabs on a bot's page. Settings and Knowledge work now. The others
-// are shown as "Soon" so the layout is ready for the phases to come.
-const UPCOMING = ["Playground", "Conversations", "Install"];
+// The section tabs on a bot's page. Settings, Knowledge and Playground work now.
+// The others are shown as "Soon" so the layout is ready for the phases to come.
+const UPCOMING = ["Conversations", "Install"];
 
 export function BotTabs({ botId, active }: { botId: string; active: BotTab }) {
   const tabs: { key: BotTab; label: string; href: string }[] = [
     { key: "settings", label: "Settings", href: `/dashboard/bots/${botId}` },
     { key: "knowledge", label: "Knowledge", href: `/dashboard/bots/${botId}/knowledge` },
+    { key: "playground", label: "Playground", href: `/dashboard/bots/${botId}/playground` },
   ];
 
   return (

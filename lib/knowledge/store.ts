@@ -1,5 +1,6 @@
 import "server-only";
 import { Binary, ObjectId } from "mongodb";
+import { EMBEDDING_DIMENSIONS, EMBEDDING_MODEL_ID } from "@/lib/ai/config";
 import { STALE_PROCESSING_MS } from "@/lib/constants";
 import { db } from "@/lib/mongodb";
 import type { FileType, SourceKind, SourceStatus, SourceSummary } from "@/lib/types";
@@ -269,4 +270,82 @@ export async function deleteKnowledgeForBot(botId: ObjectId): Promise<void> {
   await ensureIndexes();
   await chunksCollection().deleteMany({ botId });
   await sourcesCollection().deleteMany({ botId });
+}
+
+// --- Reading knowledge for chat (Phase 3) -----------------------------------------
+
+// Only sources that are ready AND were embedded with today's model and size can
+// be searched. Mixing vectors from different models would give meaningless scores.
+const searchableSourceFilter = (userId: string, botId: ObjectId) => ({
+  userId,
+  botId,
+  status: "ready" as const,
+  embeddingModel: EMBEDDING_MODEL_ID,
+  embeddingDimensions: EMBEDDING_DIMENSIONS,
+});
+
+/** How many sources of this bot can be searched right now. */
+export async function countReadySources(userId: string, botId: string): Promise<number> {
+  const _botId = toObjectId(botId);
+  if (!_botId) return 0;
+  await ensureIndexes();
+  return sourcesCollection().countDocuments(searchableSourceFilter(userId, _botId));
+}
+
+export interface SearchableChunk {
+  sourceId: string;
+  title: string;
+  fileType?: FileType;
+  page: number;
+  text: string;
+  embedding: Float32Array;
+}
+
+/**
+ * Every searchable passage of a bot, with its vector. The caller must already
+ * know that this person may use this bot: this checks the user id, but it is
+ * not a substitute for checking access.
+ *
+ * A bot holds at most MAX_CHUNKS_PER_BOT passages (1,500 vectors of 768 numbers,
+ * about 4.6 MB), so comparing a question with all of them in memory takes a few
+ * milliseconds. Many bots at once, or much bigger bots, is where a database vector
+ * index (like Atlas Vector Search) starts to pay off.
+ */
+export async function getSearchableChunks(
+  userId: string,
+  botId: string,
+): Promise<SearchableChunk[]> {
+  const _botId = toObjectId(botId);
+  if (!_botId) return [];
+  await ensureIndexes();
+
+  const sources = await sourcesCollection()
+    .find(searchableSourceFilter(userId, _botId), {
+      projection: { _id: 1, title: 1, fileType: 1 },
+    })
+    .toArray();
+  if (sources.length === 0) return [];
+
+  const byId = new Map(sources.map((source) => [source._id.toHexString(), source]));
+  const records = await chunksCollection()
+    .find(
+      { userId, botId: _botId, sourceId: { $in: sources.map((source) => source._id) } },
+      { projection: { sourceId: 1, page: 1, text: 1, embedding: 1 } },
+    )
+    .toArray();
+
+  const chunks: SearchableChunk[] = [];
+  for (const record of records) {
+    const source = byId.get(record.sourceId.toHexString());
+    if (!source) continue;
+    chunks.push({
+      sourceId: record.sourceId.toHexString(),
+      title: source.title,
+      fileType: source.fileType,
+      page: record.page,
+      text: record.text,
+      embedding: record.embedding.toFloat32Array(),
+    });
+  }
+  return chunks;
 }

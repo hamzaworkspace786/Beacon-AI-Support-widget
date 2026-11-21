@@ -15,7 +15,7 @@ export interface BotSummary {
   color: string;
   /** Websites the widget may load on. Enforced from Phase 4. */
   allowedDomains: string[];
-  /** A paused bot stays saved but the widget stops answering. Enforced from Phase 3. */
+  /** A paused bot stays saved but the widget stops answering. Enforced for visitors from Phase 4. */
   status: BotStatus;
   createdAt: string;
   updatedAt: string;
@@ -45,5 +45,37 @@ export interface SourceSummary {
   characterCount: number;
   /** The start of the text, so you can check it was read correctly. */
   excerpt: string;
+  createdAt: string;
+}
+
+// --- Chat (Phase 3) -------------------------------------------------------------
+
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+/**
+ * "answered": the bot found matching material and answered from it.
+ * "no_match": nothing in the knowledge base matched, so the bot said it didn't know.
+ * Phase 5 lists the "no_match" questions so the owner knows what to add.
+ */
+export type ChatOutcome = "answered" | "no_match";
+
+/** A source an answer may cite. The answer refers to it as [n]. */
+export interface SourceRef {
+  n: number;
+  sourceId: string;
+  title: string;
+  /** How closely the best passage of this source matched the question, 0 to 1. */
+  score: number;
+}
+
+export interface SavedChatMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  outcome?: ChatOutcome;
+  sources: SourceRef[];
   createdAt: string;
 }

@@ -4,17 +4,17 @@ An AI support chat that a business adds to its website with one line of code. It
 visitors from the business's own documents, shows where each answer came from, and says so
 when it doesn't know.
 
-This is a portfolio project, built phase by phase. **Phases 1 and 2 are built.** The chat
-itself arrives in Phase 3.
+This is a portfolio project, built phase by phase. **Phases 1 to 3 are built.** The widget
+that visitors see on a website arrives in Phase 4.
 
 ## The plan
 
 | Phase | What gets built | Status |
 | --- | --- | --- |
 | 1 | Sign-in, creating and editing bots, dashboard, settings with live preview | Done |
-| 2 | Knowledge base: upload PDF/Word/text or paste text, extract, chunk and embed it per bot | Built, run `PHASE2-CHECKLIST.md` |
-| 3 | Chat API: retrieval limited to one bot, grounded answers with sources, streaming, an "I don't know" rule, rate limits and a cost cap, and a playground in the dashboard | Next |
-| 4 | The embeddable widget: one script tag, an isolated chat window, allowed-websites check, a demo store page | |
+| 2 | Knowledge base: upload PDF/Word/text or paste text, extract, chunk and embed it per bot | Done |
+| 3 | Chat engine: retrieval limited to one bot, grounded answers with sources, streaming, an "I don't know" rule, rate limits and a cost cap, and a Playground in the dashboard | Built, run `PHASE3-CHECKLIST.md` |
+| 4 | The embeddable widget: one script tag, an isolated chat window, allowed-websites check, visitor sessions, a demo store page | Next |
 | 5 | Dashboard insights: conversations, unanswered questions, lead capture | |
 | 6 | Tool calling (an order-lookup tool), prompt-injection tests, a small answer-quality test set | |
 | 7 | Polish: README with architecture diagram, tests, load test, deploy to Vercel, demo video | |
@@ -31,7 +31,8 @@ Better Auth (email and Google), Vercel AI SDK with Google Gemini.
 3. Start it: `npm run dev`, then open http://localhost:3000
 4. Checks: `npm test`, `npm run lint`, `npm run build`
 
-Then follow the phase checklists (`PHASE1-CHECKLIST.md`, `PHASE2-CHECKLIST.md`).
+Then follow the phase checklists (`PHASE1-CHECKLIST.md`, `PHASE2-CHECKLIST.md`,
+`PHASE3-CHECKLIST.md`).
 
 ## How Phase 1 is built
 
@@ -66,3 +67,36 @@ A source (an uploaded file or pasted text) goes through these steps:
    show. A source that never finishes is marked failed after 10 minutes.
 6. **Isolation.** Every source and passage carries the owner's user id and the bot id, and
    every query filters by the user. Deleting a bot deletes everything it knows.
+
+## How Phase 3 is built
+
+A question goes through these steps:
+
+1. **Check.** The question is validated (length, shape, ends with a customer message), only
+   the last few turns are kept, and the bot must belong to the signed-in person.
+2. **Count.** The question counts against the person's, the bot's and the whole site's
+   daily allowance before any AI is called. A single database update does the counting, so
+   two requests at once can't both slip past a limit.
+3. **Search.** The question (joined with the one before it, if it is a short follow-up) is
+   embedded and compared with every passage of that one bot. Only passages that match at
+   least `MIN_RELEVANCE` are kept, best eight at most, and the sources they come from are
+   numbered 1, 2, 3 by relevance.
+4. **Decline without the AI.** If nothing matches closely enough, the bot gives a fixed
+   "I couldn't find that" answer without calling the language model. It costs nothing and can
+   never invent an answer. These questions are saved as `no_match`, which Phase 5 turns into
+   a list of what the owner should add.
+5. **Ground the answer.** The prompt tells the model to use only the numbered excerpts, to
+   treat them and the customer's words as data and not instructions, to stay on topic, to
+   cite sources as [1], and never to invent contact details or policies. Excerpt text can't
+   close its own tags.
+6. **Stream with a backup.** The answer streams back word by word. If the main model fails
+   or says nothing for 20 seconds, a backup model answers instead. After the first words,
+   it can't switch, so a later failure ends the answer with a clear "cut off" message.
+7. **Show the evidence.** Each answer carries the sources it was allowed to cite. A citation
+   of any other number is dropped as made up. The Playground's "How it answered" panel
+   shows the sources and their match scores, which is how the threshold is tuned.
+8. **Save.** The question and answer are saved together with their sources and outcome.
+
+Search compares vectors in memory. A bot holds at most 1,500 passages (about 4.6 MB of
+vectors), so that takes a few milliseconds. Many bots at once, or much larger ones, is where
+a database vector index such as Atlas Vector Search starts to pay off.
