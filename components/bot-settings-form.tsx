@@ -247,8 +247,8 @@ export function BotSettingsForm({ bot }: { bot: BotSummary }) {
               />
               <p className={hintClass}>
                 One per line, up to {MAX_ALLOWED_DOMAINS}. Use *.example.com to allow every
-                subdomain, and add localhost while testing. The widget will only load on these
-                sites once the embed code arrives in Phase 4.
+                subdomain, and add localhost while testing. The chat bubble only appears on
+                these sites.
               </p>
             </div>
             <fieldset>
@@ -335,8 +335,8 @@ export function BotSettingsForm({ bot }: { bot: BotSummary }) {
             </button>
           </div>
           <p className="mt-2 text-sm text-muted">
-            This is the public ID your website&rsquo;s embed code will use. The ready-made
-            embed code arrives in Phase 4.
+            This is the public ID your website&rsquo;s embed code uses. You&rsquo;ll find the
+            ready-made embed code in the Install tab.
           </p>
         </div>
       </aside>

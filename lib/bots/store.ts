@@ -79,6 +79,24 @@ export async function getBot(userId: string, id: string): Promise<BotSummary | n
   return record ? toSummary(record) : null;
 }
 
+/** A bot as the public widget sees it. ownerId is internal and must never be sent to a browser. */
+export interface PublicBot extends BotSummary {
+  ownerId: string;
+}
+
+/**
+ * Finds a bot by its public id, for the widget on a customer's website. There is no
+ * signed-in person here: anyone who knows the public id can ask. The caller must
+ * check the bot's status and allowed websites, and must only send the browser what
+ * the visitor needs (never ownerId, allowed websites or the business name's source).
+ */
+export async function getBotForPublic(publicId: string): Promise<PublicBot | null> {
+  if (!/^bot_[0-9a-f]{20}$/.test(publicId)) return null;
+  await ensureIndexes();
+  const record = await botsCollection().findOne({ publicId });
+  return record ? { ...toSummary(record), ownerId: record.userId } : null;
+}
+
 export async function createBot(userId: string, name: string): Promise<BotSummary> {
   await ensureIndexes();
   const now = new Date();

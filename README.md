@@ -4,8 +4,8 @@ An AI support chat that a business adds to its website with one line of code. It
 visitors from the business's own documents, shows where each answer came from, and says so
 when it doesn't know.
 
-This is a portfolio project, built phase by phase. **Phases 1 to 3 are built.** The widget
-that visitors see on a website arrives in Phase 4.
+This is a portfolio project, built phase by phase. **Phases 1 to 4 are built.** The owner's
+view of conversations and unanswered questions arrives in Phase 5.
 
 ## The plan
 
@@ -13,9 +13,9 @@ that visitors see on a website arrives in Phase 4.
 | --- | --- | --- |
 | 1 | Sign-in, creating and editing bots, dashboard, settings with live preview | Done |
 | 2 | Knowledge base: upload PDF/Word/text or paste text, extract, chunk and embed it per bot | Done |
-| 3 | Chat engine: retrieval limited to one bot, grounded answers with sources, streaming, an "I don't know" rule, rate limits and a cost cap, and a Playground in the dashboard | Built, run `PHASE3-CHECKLIST.md` |
-| 4 | The embeddable widget: one script tag, an isolated chat window, allowed-websites check, visitor sessions, a demo store page | Next |
-| 5 | Dashboard insights: conversations, unanswered questions, lead capture | |
+| 3 | Chat engine: retrieval limited to one bot, grounded answers with sources, streaming, an "I don't know" rule, rate limits and a cost cap, and a Playground in the dashboard | Done |
+| 4 | The embeddable widget: one script tag, an isolated chat window, allowed-websites check, visitor sessions, an Install tab with a live preview | Built, run `PHASE4-CHECKLIST.md` |
+| 5 | Dashboard insights: conversations, unanswered questions, lead capture | Next |
 | 6 | Tool calling (an order-lookup tool), prompt-injection tests, a small answer-quality test set | |
 | 7 | Polish: README with architecture diagram, tests, load test, deploy to Vercel, demo video | |
 
@@ -32,7 +32,7 @@ Better Auth (email and Google), Vercel AI SDK with Google Gemini.
 4. Checks: `npm test`, `npm run lint`, `npm run build`
 
 Then follow the phase checklists (`PHASE1-CHECKLIST.md`, `PHASE2-CHECKLIST.md`,
-`PHASE3-CHECKLIST.md`).
+`PHASE3-CHECKLIST.md`, `PHASE4-CHECKLIST.md`).
 
 ## How Phase 1 is built
 
@@ -100,3 +100,42 @@ A question goes through these steps:
 Search compares vectors in memory. A bot holds at most 1,500 passages (about 4.6 MB of
 vectors), so that takes a few milliseconds. Many bots at once, or much larger ones, is where
 a database vector index such as Atlas Vector Search starts to pay off.
+
+## How Phase 4 is built
+
+A business adds one line to its website:
+
+```html
+<script src="https://YOUR-BEACON-ADDRESS/widget.js" data-bot="bot_..." async></script>
+```
+
+1. **The loader (`public/widget.js`).** About 200 lines of plain JavaScript with no
+   dependencies. It first asks Beacon for the bot's look and whether it may appear on this
+   website. Only if the answer is yes does it draw a round button, inside a shadow root so the
+   website's CSS can't change it and it can't change the website's.
+2. **The chat window (`/embed/<bot id>`).** Clicking the button opens an iframe served by
+   Beacon. The chat's code and styles never run inside the customer's page. The window tells
+   the loader to close by `postMessage`, and the loader only listens to its own iframe and
+   Beacon's own address.
+3. **Which websites may show a bot.** Two checks, both based on headers the browser fills in
+   and a web page cannot forge:
+   - The loader's request for the bot's look carries an `Origin` header. A website that isn't
+     on the bot's list of allowed websites gets `{ "enabled": false }` and no bubble.
+   - The chat window's request carries a `Referer` header naming the website that framed it.
+     A website that isn't on the list gets a notice instead of the chat, and no chat code or
+     bot details are sent. Direct visits to the chat address (no framing website) are refused.
+4. **Visitors.** Each visitor gets a random id in their browser (`localStorage`). It keeps one
+   visitor's conversation apart from another's and brings it back after a reload. It is not a
+   login: anyone can pick any id.
+5. **The chat API for visitors** (`/api/widget/<bot id>/chat`) refuses any request whose
+   `Origin` isn't Beacon's own address, so another website's script can't make a visitor's
+   browser call it. It uses the same answering code as the owner's Playground
+   (`lib/chat/respond.ts`), so there is one place to improve answers.
+6. **What actually protects the AI allowance.** A program outside a browser can send any
+   headers, so the website checks stop casual misuse but not a determined caller. The real
+   protection is the limits: per visitor, per network address, per bot per day (shared with
+   the owner's test questions) and for the whole site. A visitor sees friendly messages and
+   learns nothing about how Beacon is set up.
+7. **The Install tab.** Shows whether the bot is ready to appear (active, has knowledge, has
+   an allowed website), the embed code with the right address, a live preview that adds the
+   real widget to the dashboard page, and steps to test on a real page from your own computer.

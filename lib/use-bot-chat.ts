@@ -46,11 +46,14 @@ function parseSources(header: string | null): SourceRef[] {
 }
 
 /**
- * The owner's test conversation with one bot. Each finished answer is saved on
- * the server, and the saved conversation is loaded when the Playground opens,
- * so it survives a refresh. Only one answer streams at a time.
+ * A test or visitor conversation with one bot. Each finished answer is saved on
+ * the server, and the saved conversation is loaded when the chat opens, so it
+ * survives a refresh. Only one answer streams at a time.
+ *
+ * `endpoint` is the chat route: the owner's Playground uses /api/bots/:id/chat, and
+ * the public widget uses /api/widget/:publicId/chat together with a visitor id.
  */
-export function useBotChat(botId: string) {
+export function useBotChat(endpoint: string, visitorId?: string) {
   const [turns, setTurns] = useState<ChatTurn[]>([]);
   const [history, setHistory] = useState<HistoryState>("loading");
   const [busy, setBusy] = useState(false);
@@ -60,7 +63,10 @@ export function useBotChat(botId: string) {
   /** Load the saved conversation. */
   const load = useCallback(async () => {
     try {
-      const response = await fetch(`/api/bots/${botId}/chat`, { cache: "no-store" });
+      const response = await fetch(endpoint, {
+        cache: "no-store",
+        headers: visitorId ? { "X-Beacon-Visitor": visitorId } : {},
+      });
       const body = (await response.json().catch(() => null)) as {
         messages?: SavedChatMessage[];
       } | null;
@@ -80,7 +86,7 @@ export function useBotChat(botId: string) {
     } catch {
       setHistory("failed");
     }
-  }, [botId]);
+  }, [endpoint, visitorId]);
 
   function retryLoad() {
     setHistory("loading");
@@ -140,9 +146,12 @@ export function useBotChat(botId: string) {
     let received = "";
 
     try {
-      const response = await fetch(`/api/bots/${botId}/chat`, {
+      const response = await fetch(endpoint, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(visitorId ? { "X-Beacon-Visitor": visitorId } : {}),
+        },
         body: JSON.stringify({ messages: [...earlier, { role: "user", content: question }] }),
         signal: abort.signal,
       });
@@ -198,7 +207,10 @@ export function useBotChat(botId: string) {
   /** Delete the conversation here and on the server. Resolves with null when it worked, or a message to show. */
   async function clear(): Promise<string | null> {
     try {
-      const response = await fetch(`/api/bots/${botId}/chat`, { method: "DELETE" });
+      const response = await fetch(endpoint, {
+        method: "DELETE",
+        headers: visitorId ? { "X-Beacon-Visitor": visitorId } : {},
+      });
       if (!response.ok) return "Couldn't clear this conversation. Try again.";
     } catch {
       return "Couldn't clear this conversation. Check your connection and try again.";

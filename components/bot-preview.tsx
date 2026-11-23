@@ -1,4 +1,5 @@
 import { Send } from "lucide-react";
+import { BotAvatar } from "@/components/bot-avatar";
 import { readableTextColor } from "@/lib/color";
 
 /**
@@ -16,17 +17,11 @@ export function BotPreview({
 }) {
   const text = readableTextColor(color);
   const displayName = name.trim() || "Your bot";
-  const initial = displayName.charAt(0).toUpperCase();
 
   return (
     <div className="overflow-hidden rounded-2xl border border-line bg-surface shadow-lg">
       <div className="flex items-center gap-3 px-4 py-3.5" style={{ background: color, color: text }}>
-        <span
-          className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-sm font-semibold"
-          style={{ background: text, color }}
-        >
-          {initial}
-        </span>
+        <BotAvatar color={color} foreground={text} />
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold leading-tight">{displayName}</p>
           <p className="text-xs leading-tight">Answers from our documents</p>

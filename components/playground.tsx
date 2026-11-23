@@ -4,8 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronDown, RotateCcw, Send, Square } from "lucide-react";
+import { AnswerText, Chip } from "@/components/chat-answer";
 import { CHAT_MAX_MESSAGE_CHARS, MIN_RELEVANCE } from "@/lib/constants";
-import { cleanAnswerText, splitCitations, validSources } from "@/lib/chat/citations";
 import { readableTextColor } from "@/lib/color";
 import { useBotChat, type ChatTurn } from "@/lib/use-bot-chat";
 import type { BotSummary } from "@/lib/types";
@@ -17,44 +17,6 @@ const STARTERS = [
 ];
 
 const percent = (score: number) => `${Math.round(score * 100)}%`;
-
-function Chip({ n, title }: { n: number; title?: string }) {
-  return (
-    <span
-      title={title}
-      aria-label={title ? `Source ${n}: ${title}` : `Source ${n}`}
-      className="mx-0.5 inline-grid h-[18px] min-w-[18px] place-items-center rounded-full bg-brand-soft px-1 align-baseline text-[11px] font-semibold text-brand"
-    >
-      {n}
-    </span>
-  );
-}
-
-// The answer, with each [1] marker turned into a small numbered chip. A number
-// the model was never shown is dropped: it was made up.
-function AnswerText({ turn }: { turn: ChatTurn }) {
-  if (!turn.content) {
-    return turn.state === "streaming" ? <span className="text-muted">Thinking...</span> : null;
-  }
-
-  const allowed = turn.sources.map((source) => source.n);
-  const titles = new Map(turn.sources.map((source) => [source.n, source.title]));
-  const segments = splitCitations(cleanAnswerText(turn.content), turn.state === "streaming");
-
-  return (
-    <p className="whitespace-pre-wrap">
-      {segments.map((segment, i) =>
-        segment.type === "text" ? (
-          <span key={i}>{segment.text}</span>
-        ) : (
-          validSources(segment.sources, allowed).map((n) => (
-            <Chip key={`${i}-${n}`} n={n} title={titles.get(n)} />
-          ))
-        ),
-      )}
-    </p>
-  );
-}
 
 // Shows the owner what the bot based its answer on, and how closely each source
 // matched. This is how you tune the match threshold and spot weak knowledge.
@@ -110,7 +72,9 @@ function HowItAnswered({ turn }: { turn: ChatTurn }) {
 
 export function Playground({ bot, hasKnowledge }: { bot: BotSummary; hasKnowledge: boolean }) {
   const router = useRouter();
-  const { turns, history, busy, load, retryLoad, ask, stop, clear } = useBotChat(bot.id);
+  const { turns, history, busy, load, retryLoad, ask, stop, clear } = useBotChat(
+    `/api/bots/${bot.id}/chat`,
+  );
   const [draft, setDraft] = useState("");
   const [clearError, setClearError] = useState("");
   const scroller = useRef<HTMLDivElement>(null);

@@ -87,6 +87,13 @@ export const LIMITS = {
   questionsPerDay: 100,
   // Per bot, per day: a cost cap, so one bot can't use up everything
   botQuestionsPerDay: 300,
+  // Public widget: per visitor (a random id in their browser) and per IP address.
+  // The visitor id can be changed by anyone, so the IP limits and the bot cap are
+  // the real protection against abuse.
+  visitorQuestionsPerMinute: 5,
+  visitorQuestionsPerDay: 40,
+  ipQuestionsPerMinute: 15,
+  ipQuestionsPerDay: 150,
   // Whole site, per day
   siteSourcesPerDay: 150,
   siteQuestionsPerDay: 800,

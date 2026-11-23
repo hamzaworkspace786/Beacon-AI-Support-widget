@@ -3,23 +3,33 @@ import { LIMITS } from "@/lib/constants";
 import { db } from "@/lib/mongodb";
 
 // Fair-use limits. Every source added and every question asked calls the AI,
-// which runs on free quotas, so each use is counted per person, per bot and for
-// the whole site. Phase 4 adds per-visitor limits for the public widget.
+// which runs on free quotas, so each use is counted per person (or visitor), per
+// bot and for the whole site.
 //
 // A counter is one small record per (who, what, time window). Counting is done
 // with a single database update, so two requests arriving at the same moment
 // can never both slip past a limit. Old counters delete themselves (TTL index).
 
-export type Action = "source" | "question";
+export type Action = "source" | "question" | "widget";
 type Windows = "minute" | "hour" | "day";
 
 interface Rule {
-  /** "user": the signed-in person. "bot": one bot's daily cost cap. "site": everyone. */
-  scope: "user" | "bot" | "site";
+  /**
+   * Who is counted. "user": the signed-in person. "visitor": a customer, by the
+   * random id their widget made. "ip": the network address a request came from.
+   * "bot": one bot's daily cost cap. "site": everyone together.
+   */
+  scope: "user" | "visitor" | "ip" | "bot" | "site";
   window: Windows;
   limit: number;
   /** What the person is told when this limit is reached. */
   message: string;
+  /**
+   * Count under another action's counter. The bot and site caps of a widget
+   * question use the "question" counters, so the owner's test questions and
+   * visitors' questions draw from the same daily allowance.
+   */
+  counter?: Action;
 }
 
 const SITE_BUSY =
@@ -30,6 +40,11 @@ const resets = (window: Windows) =>
     : window === "hour"
       ? "Try again within the hour."
       : "Wait a minute and try again.";
+
+// What a customer is told. It says nothing about how Beacon works inside.
+const VISITOR_FAST = "You're sending messages quickly. Please wait a moment and try again.";
+const VISITOR_DAILY = "You've reached today's message limit. Please try again tomorrow.";
+const VISITOR_BUSY = "This assistant is very busy right now. Please try again later.";
 
 const RULES: Record<Action, Rule[]> = {
   source: [
@@ -68,10 +83,30 @@ const RULES: Record<Action, Rule[]> = {
     },
     { scope: "site", window: "day", limit: LIMITS.siteQuestionsPerDay, message: SITE_BUSY },
   ],
+  widget: [
+    { scope: "visitor", window: "minute", limit: LIMITS.visitorQuestionsPerMinute, message: VISITOR_FAST },
+    { scope: "ip", window: "minute", limit: LIMITS.ipQuestionsPerMinute, message: VISITOR_FAST },
+    { scope: "visitor", window: "day", limit: LIMITS.visitorQuestionsPerDay, message: VISITOR_DAILY },
+    { scope: "ip", window: "day", limit: LIMITS.ipQuestionsPerDay, message: VISITOR_DAILY },
+    {
+      scope: "bot",
+      window: "day",
+      limit: LIMITS.botQuestionsPerDay,
+      message: VISITOR_BUSY,
+      counter: "question",
+    },
+    {
+      scope: "site",
+      window: "day",
+      limit: LIMITS.siteQuestionsPerDay,
+      message: VISITOR_BUSY,
+      counter: "question",
+    },
+  ],
 };
 
 interface Counter {
-  userId: string; // who is counted: a user id, "bot:<id>", or SITE
+  userId: string; // who is counted: a user id, "visitor:<id>", "ip:<address>", "bot:<id>", or SITE
   kind: Action;
   bucket: string; // the minute, hour or day this count belongs to
   count: number;
@@ -96,7 +131,7 @@ function ensureIndexes() {
 const SECONDS = { minute: 60, hour: 3600, day: 86400 } as const;
 const BUCKET_LENGTH = { minute: 16, hour: 13, day: 10 } as const; // characters of the ISO date
 
-/** "2026-11-20T10:23" for a minute, "2026-11-20T10" for an hour, "2026-11-20" for a day. */
+/** "2026-11-21T10:23" for a minute, "2026-11-21T10" for an hour, "2026-11-21" for a day. */
 export function bucketFor(window: Windows, now: Date) {
   return now.toISOString().slice(0, BUCKET_LENGTH[window]);
 }
@@ -137,11 +172,20 @@ export type UsageResult =
   | { ok: true }
   | { ok: false; message: string; retryAfterSeconds: number };
 
+export interface ConsumeOptions {
+  botId?: string;
+  /** For the "widget" action: the visitor's random id. */
+  visitorId?: string;
+  /** For the "widget" action: the network address of the request. */
+  ip?: string;
+  now?: Date;
+}
+
 /**
- * Count one use of an AI feature for this person, for the bot (when the action
- * has a per-bot rule) and for the site. Call it after the cheap checks (sign-in,
- * a valid question, the bot exists) and before the AI is called. When a limit is
- * reached it says which one, in words fit to show the person.
+ * Count one use of an AI feature against every limit that applies to it. Call
+ * it after the cheap checks (sign-in or a valid visitor, a valid question, the bot
+ * exists) and before the AI is called. When a limit is reached it says which
+ * one, in words fit to show the person.
  *
  * A use that later fails still counts, which keeps this simple and fair to the
  * free quota the failed call may have used.
@@ -149,23 +193,34 @@ export type UsageResult =
 export async function consume(
   userId: string,
   action: Action,
-  options: { botId?: string; now?: Date } = {},
+  options: ConsumeOptions = {},
 ): Promise<UsageResult> {
   await ensureIndexes();
   const now = options.now ?? new Date();
 
   for (const rule of RULES[action]) {
     let who: string;
-    if (rule.scope === "site") {
-      who = SITE;
-    } else if (rule.scope === "bot") {
-      if (!options.botId) throw new Error(`The "${action}" action needs a botId.`);
-      who = `bot:${options.botId}`;
-    } else {
-      who = userId;
+    switch (rule.scope) {
+      case "site":
+        who = SITE;
+        break;
+      case "bot":
+        if (!options.botId) throw new Error(`The "${action}" action needs a botId.`);
+        who = `bot:${options.botId}`;
+        break;
+      case "visitor":
+        if (!options.visitorId) throw new Error(`The "${action}" action needs a visitorId.`);
+        who = `visitor:${options.visitorId}`;
+        break;
+      case "ip":
+        if (!options.ip) throw new Error(`The "${action}" action needs an ip.`);
+        who = `ip:${options.ip}`;
+        break;
+      default:
+        who = userId;
     }
 
-    const ok = await take(who, action, rule, now);
+    const ok = await take(who, rule.counter ?? action, rule, now);
     if (!ok) {
       return { ok: false, message: rule.message, retryAfterSeconds: secondsLeft(rule.window, now) };
     }
